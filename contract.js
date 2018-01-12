@@ -105,7 +105,7 @@ var contract = (function(module) {
         return log != null;
       });
     },
-    promisifyFunction: function(fn, C) {
+    promisifyFunction: function(fn, C, inputs) {
       var self = this;
       return function() {
         var instance = this;
@@ -113,9 +113,21 @@ var contract = (function(module) {
         var args = Array.prototype.slice.call(arguments);
         var tx_params = {};
         var last_arg = args[args.length - 1];
+        var defaultBlock;
 
         // It's only tx_params if it's an object and not a BigNumber.
-        if (Utils.is_object(last_arg) && !Utils.is_big_number(last_arg)) {
+        // It's only defaultBlock if there's an extra non-object input that's not tx_params.
+        var hasInputs = inputs !== undefined;
+        var hasTxParams = Utils.is_object(last_arg) && !Utils.is_big_number(last_arg);
+        var hasDefaultBlock = hasInputs && !hasTxParams && args.length > inputs.length;
+        var hasDefaultBlockWithParams = hasInputs && hasTxParams && args.length - 1 > inputs.length;
+
+        // Detect and extract defaultBlock parameter
+        if (hasDefaultBlock || hasDefaultBlockWithParams) {
+            defaultBlock = args.pop();
+        }
+        // Get tx params
+        if (hasTxParams) {
           tx_params = args.pop();
         }
 
@@ -130,7 +142,13 @@ var contract = (function(module) {
                 accept(result);
               }
             };
-            args.push(tx_params, callback);
+
+            if (defaultBlock !== undefined){
+              args.push(tx_params, defaultBlock, callback);
+            } else {
+              args.push(tx_params, callback);
+            }
+
             fn.apply(instance.contract, args);
           });
         });
@@ -274,7 +292,7 @@ var contract = (function(module) {
       var item = this.abi[i];
       if (item.type == "function") {
         if (item.constant == true) {
-          this[item.name] = Utils.promisifyFunction(contract[item.name], constructor);
+          this[item.name] = Utils.promisifyFunction(contract[item.name], constructor, item.inputs);
         } else {
           this[item.name] = Utils.synchronizeFunction(contract[item.name], this, constructor);
         }

@@ -123,6 +123,34 @@ describe("Abstractions", function() {
     }).then(done).catch(done);
   });
 
+  it.skip("should allow setting the defaultBlock parameter", function(done){
+    var example;
+    var initialBlock;
+    var nextBlock;
+    var initialValue = web3.toBigNumber(5);
+
+    Example.new(initialValue, {gas: 3141592}).then(function(instance) {
+      example = instance;
+      return new Promise(function(accept, reject){
+        web3.eth.getBlockNumber(function(err, val){
+          (err) ? reject(err) : accept(val);
+        })
+      });
+    }).then(function(blockNumber) {
+      initialBlock = blockNumber;
+      return example.setValue(10, {gas: 3141592});
+    }).then(function(tx){
+      nextBlock = tx.receipt.blockNumber;
+      return example.getValue(initialBlock);
+    }).then(function(defaultBlockValue){
+      assert.notEqual(initialBlock, nextBlock, "blockNumbers should differ");
+      assert(initialValue.eq(defaultBlockValue), "should get initial value");
+      return example.getValuePlus(10, initialBlock);
+    }).then(function(defaultBlockValue){
+      assert.equal(initialValue.plus(10).eq(defaultBlockValue), "should get inital value + 10");
+    }).then(done).catch(done);
+  })
+
   it("should return transaction hash, logs and receipt when using synchronised transactions", function(done) {
     var example = null;
     Example.new({gas: 3141592}).then(function(instance) {

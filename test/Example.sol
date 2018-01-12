@@ -21,6 +21,10 @@ contract Example {
     return value;
   }
 
+  function getValuePlus(uint sum) constant returns(uint) {
+    return value + sum;
+  }
+
   function parrot(uint val) returns(uint) {
     return val;
   }
