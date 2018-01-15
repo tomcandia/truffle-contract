@@ -117,10 +117,9 @@ var contract = (function(module) {
 
         // It's only tx_params if it's an object and not a BigNumber.
         // It's only defaultBlock if there's an extra non-object input that's not tx_params.
-        var hasInputs = inputs !== undefined;
         var hasTxParams = Utils.is_object(last_arg) && !Utils.is_big_number(last_arg);
-        var hasDefaultBlock = hasInputs && !hasTxParams && args.length > inputs.length;
-        var hasDefaultBlockWithParams = hasInputs && hasTxParams && args.length - 1 > inputs.length;
+        var hasDefaultBlock = !hasTxParams && args.length > inputs.length;
+        var hasDefaultBlockWithParams = hasTxParams && args.length - 1 > inputs.length;
 
         // Detect and extract defaultBlock parameter
         if (hasDefaultBlock || hasDefaultBlockWithParams) {
@@ -297,7 +296,7 @@ var contract = (function(module) {
           this[item.name] = Utils.synchronizeFunction(contract[item.name], this, constructor);
         }
 
-        this[item.name].call = Utils.promisifyFunction(contract[item.name].call, constructor);
+        this[item.name].call = Utils.promisifyFunction(contract[item.name].call, constructor, item.inputs);
         this[item.name].sendTransaction = Utils.promisifyFunction(contract[item.name].sendTransaction, constructor);
         this[item.name].request = contract[item.name].request;
         this[item.name].estimateGas = Utils.promisifyFunction(contract[item.name].estimateGas, constructor);
