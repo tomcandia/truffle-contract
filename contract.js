@@ -196,6 +196,71 @@ var contract = (function(module) {
         });
       };
     },
+    watchableFunction : function(fn, instance, C) {
+      var self = this;
+      return function() {
+        var args = Array.prototype.slice.call(arguments);
+        var tx_params = {};
+        var last_arg = args[args.length - 1];
+
+        // It's only tx_params if it's an object and not a BigNumber.
+        if (Utils.is_object(last_arg) && !Utils.is_big_number(last_arg)) {
+          tx_params = args.pop();
+        }
+
+        tx_params = Utils.merge(C.class_defaults, tx_params);
+
+        return C.detectNetwork().then(function() {
+          return new Promise(function(accept, reject) {
+            var callback = function(error, tx) {
+              if (error != null) {
+                reject(error);
+                return;
+              }
+
+              var timeout;
+              if (C.synchronization_timeout === 0 || C.synchronization_timeout !== undefined) {
+                timeout = C.synchronization_timeout;
+              } else {
+                timeout = 240000;
+              }
+
+              var start = new Date().getTime();
+
+              return accept({
+                  tx : tx,
+                  next : new Promise(function(accept, reject) {
+                    var make_attempt = function() {
+                      C.web3.eth.getTransactionReceipt(tx, function(err, receipt) {
+                        if (err) return reject(err);
+
+                        if (receipt != null) {
+                          return accept({
+                            tx: tx,
+                            receipt: receipt,
+                            logs: Utils.decodeLogs(C, instance, receipt.logs)
+                          });
+                        }
+
+                        if (timeout > 0 && new Date().getTime() - start > timeout) {
+                          return reject(new Error("Transaction " + tx + " wasn't processed in " + (timeout / 1000) + " seconds!"));
+                        }
+
+                        setTimeout(make_attempt, 1000);
+                      })
+                    }
+
+                    return make_attempt();
+                  })
+                });
+              };
+
+            args.push(tx_params, callback);
+            fn.apply(self, args);
+          });
+        });
+      };
+    },
     merge: function() {
       var merged = {};
       var args = Array.prototype.slice.call(arguments);
@@ -283,6 +348,7 @@ var contract = (function(module) {
           this[item.name] = Utils.promisifyFunction(contract[item.name], constructor);
         } else {
           this[item.name] = Utils.synchronizeFunction(contract[item.name], this, constructor);
+          this[item.name].watch = Utils.watchableFunction(contract[item.name], this, constructor);
         }
 
         this[item.name].call = Utils.promisifyFunction(contract[item.name].call, constructor);

@@ -198,6 +198,71 @@ var contract = (function(module) {
         });
       };
     },
+    watchableFunction : function(fn, instance, C) {
+      var self = this;
+      return function() {
+        var args = Array.prototype.slice.call(arguments);
+        var tx_params = {};
+        var last_arg = args[args.length - 1];
+
+        // It's only tx_params if it's an object and not a BigNumber.
+        if (Utils.is_object(last_arg) && !Utils.is_big_number(last_arg)) {
+          tx_params = args.pop();
+        }
+
+        tx_params = Utils.merge(C.class_defaults, tx_params);
+
+        return C.detectNetwork().then(function() {
+          return new Promise(function(accept, reject) {
+            var callback = function(error, tx) {
+              if (error != null) {
+                reject(error);
+                return;
+              }
+
+              var timeout;
+              if (C.synchronization_timeout === 0 || C.synchronization_timeout !== undefined) {
+                timeout = C.synchronization_timeout;
+              } else {
+                timeout = 240000;
+              }
+
+              var start = new Date().getTime();
+
+              return accept({
+                  tx : tx,
+                  next : new Promise(function(accept, reject) {
+                    var make_attempt = function() {
+                      C.web3.eth.getTransactionReceipt(tx, function(err, receipt) {
+                        if (err) return reject(err);
+
+                        if (receipt != null) {
+                          return accept({
+                            tx: tx,
+                            receipt: receipt,
+                            logs: Utils.decodeLogs(C, instance, receipt.logs)
+                          });
+                        }
+
+                        if (timeout > 0 && new Date().getTime() - start > timeout) {
+                          return reject(new Error("Transaction " + tx + " wasn't processed in " + (timeout / 1000) + " seconds!"));
+                        }
+
+                        setTimeout(make_attempt, 1000);
+                      })
+                    }
+
+                    return make_attempt();
+                  })
+                });
+              };
+
+            args.push(tx_params, callback);
+            fn.apply(self, args);
+          });
+        });
+      };
+    },
     merge: function() {
       var merged = {};
       var args = Array.prototype.slice.call(arguments);
@@ -285,6 +350,7 @@ var contract = (function(module) {
           this[item.name] = Utils.promisifyFunction(contract[item.name], constructor);
         } else {
           this[item.name] = Utils.synchronizeFunction(contract[item.name], this, constructor);
+          this[item.name].watch = Utils.watchableFunction(contract[item.name], this, constructor);
         }
 
         this[item.name].call = Utils.promisifyFunction(contract[item.name].call, constructor);
@@ -371,6 +437,15 @@ var contract = (function(module) {
           // It's only tx_params if it's an object and not a BigNumber.
           if (Utils.is_object(last_arg) && !Utils.is_big_number(last_arg)) {
             tx_params = args.pop();
+          }
+
+          // Validate constructor args
+          var constructor = self.abi.filter(function(item){
+            return item.type === 'constructor';
+          });
+
+          if (constructor.length && constructor[0].inputs.length !== args.length){
+            throw new Error(self.contractName + " contract constructor expected " + constructor[0].inputs.length + " arguments, received " + args.length);
           }
 
           tx_params = Utils.merge(self.class_defaults, tx_params);
@@ -15894,34 +15969,29 @@ module.exports = TruffleContractSchema;
 }));
 },{"./core":65}],68:[function(require,module,exports){
 module.exports={
-  "_args": [
-    [
-      "truffle-contract-schema@1.0.1",
-      "/Users/gnidan/src/work/release/dependencies/truffle-contract"
-    ]
-  ],
-  "_from": "truffle-contract-schema@1.0.1",
+  "_from": "truffle-contract-schema@^1.0.0",
   "_id": "truffle-contract-schema@1.0.1",
   "_inBundle": false,
   "_integrity": "sha512-37ZO9FVvmW/PZz/sh00LAz7HN2U4FHERuxI4mCbUR6h3r2cRgZ4YBfzHuAHOnZlrVzM1qx/Dx/1Ng3UyfWseEA==",
   "_location": "/truffle-contract-schema",
   "_phantomChildren": {},
   "_requested": {
-    "type": "version",
+    "type": "range",
     "registry": true,
-    "raw": "truffle-contract-schema@1.0.1",
+    "raw": "truffle-contract-schema@^1.0.0",
     "name": "truffle-contract-schema",
     "escapedName": "truffle-contract-schema",
-    "rawSpec": "1.0.1",
+    "rawSpec": "^1.0.0",
     "saveSpec": null,
-    "fetchSpec": "1.0.1"
+    "fetchSpec": "^1.0.0"
   },
   "_requiredBy": [
     "/"
   ],
   "_resolved": "https://registry.npmjs.org/truffle-contract-schema/-/truffle-contract-schema-1.0.1.tgz",
-  "_spec": "1.0.1",
-  "_where": "/Users/gnidan/src/work/release/dependencies/truffle-contract",
+  "_shasum": "08ceaefe71062a8ac9ab881a77a30fda3744176e",
+  "_spec": "truffle-contract-schema@^1.0.0",
+  "_where": "/Users/tomcandia/Projects/truffle-contract",
   "author": {
     "name": "Tim Coulter",
     "email": "tim.coulter@consensys.net"
@@ -15929,10 +15999,12 @@ module.exports={
   "bugs": {
     "url": "https://github.com/trufflesuite/truffle-schema/issues"
   },
+  "bundleDependencies": false,
   "dependencies": {
     "ajv": "^5.1.1",
     "crypto-js": "^3.1.9-1"
   },
+  "deprecated": false,
   "description": "JSON schema for contract artifacts",
   "devDependencies": {
     "mocha": "^3.2.0",
